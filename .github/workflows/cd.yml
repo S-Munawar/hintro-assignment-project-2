@@ -130,9 +130,6 @@ jobs:
             docker compose pull api web
             docker compose up -d --no-build --remove-orphans
 
-            # Run Prisma migrations inside the API container
-            docker compose exec -T api npx prisma migrate deploy
-
             # Verify services are healthy
             sleep 10
             docker compose ps
