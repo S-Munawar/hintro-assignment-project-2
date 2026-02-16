@@ -16,12 +16,12 @@ This document describes the architecture of **Hintro**, a real-time Kanban board
 |---|---|
 | Frontend | Next.js 16 (App Router) with React 19, Zustand 5, Tailwind CSS 3, @dnd-kit |
 | Backend | Express 5, Prisma 6, Socket.IO 4, Zod validation |
-| Database | PostgreSQL 16 with optimised indexes |
+| Database | Prisma Postgres (managed PostgreSQL) |
 | Real-time | Socket.IO (WebSocket + polling fallback) |
 | Auth | Supabase Auth (email/password, OAuth) |
 | Monorepo | Turborepo 2 with pnpm 9 workspaces |
 | Testing | Vitest 4 (frontend — 348 tests), Jest 30 (backend — 150 tests) |
-| CI/CD | GitHub Actions → Docker → GHCR → Docker Compose deploy |
+| CI/CD | GitHub Actions → Docker Hub → GCE Docker Compose |
 
 ---
 
@@ -33,7 +33,7 @@ Three-tier architecture:
 
 1. **Presentation Layer** — Next.js 16 App Router with server/client components
 2. **Application Layer** — Express 5 REST API + Socket.IO for WebSockets
-3. **Data Layer** — PostgreSQL 16 via Prisma 6 ORM
+3. **Data Layer** — Prisma Postgres (managed) via Prisma 6 ORM
 
 ### 1.2 Technology Stack
 
@@ -50,7 +50,7 @@ Three-tier architecture:
 | Backend Runtime | Node.js | ≥ 18 (20 recommended) | JavaScript runtime |
 | Web Framework | Express | 5.1 | HTTP server and routing |
 | ORM | Prisma | 6.8 | Type-safe DB client and migrations |
-| Database | PostgreSQL | 16 | Relational persistence |
+| Database | Prisma Postgres | Managed | Relational persistence |
 | Auth | Supabase Auth | 2.49 | Managed authentication |
 | Validation | Zod | 3.24 | Schema validation (shared package) |
 | Security | Helmet | 8.1 | HTTP security headers |
@@ -74,7 +74,7 @@ Three-tier architecture:
 │   ├── eslint-config/       # Shared ESLint configurations
 │   ├── typescript-config/   # Shared tsconfig presets
 │   └── ui/                  # Shared React component library
-├── docker-compose.yml       # PostgreSQL + API + Web
+├── docker-compose.yml       # API + Web (Prisma Postgres)
 ├── turbo.json               # Pipeline: build, lint, check-types, dev
 ├── pnpm-workspace.yaml      # apps/*, packages/*
 └── package.json             # Root with pnpm@9, Node ≥18
@@ -369,7 +369,7 @@ All input validation is handled by Zod schemas in `packages/shared/src/schemas/`
 
 ---
 
-## 4. Database Design (PostgreSQL 16)
+## 4. Database Design (Prisma Postgres)
 
 ### 4.1 Schema Overview
 
@@ -673,15 +673,16 @@ EXPOSE 5000
 CMD ["node", "dist/app.js"]
 ```
 
-### 9.2 Docker Compose
+### 9.2 Google Compute Engine
 
-Three services with health checks:
+Both services run on a single GCE VM via Docker Compose:
 
-| Service | Image | Port | Depends On |
+| Service | Container | Port | Depends On |
 |---|---|---|---|
-| `postgres` | postgres:16-alpine | 5432 | — |
-| `api` | Built from `apps/api/Dockerfile` | 5000 | postgres (healthy) |
-| `web` | Built from `apps/web/Dockerfile` | 3000 | api (healthy) |
+| `api` | Pulled from Docker Hub | 5000 | — |
+| `web` | Pulled from Docker Hub | 3000 | api (healthy) |
+
+Docker images are stored on **Docker Hub** (`<username>/hintro-api`, `<username>/hintro-web`).
 
 ### 9.3 CI/CD Pipeline (GitHub Actions)
 
@@ -708,9 +709,10 @@ Three services with health checks:
 **CD** (`.github/workflows/cd.yml`) — on push to `main`:
 
 1. Run full CI pipeline
-2. Build & push Docker images to GHCR
-3. SSH to production server
-4. `docker compose pull && docker compose up -d`
+2. Authenticate to GCP via Workload Identity Federation
+3. Build & push Docker images to Docker Hub
+4. SSH into GCE VM → pull images → `docker compose up`
+5. Run Prisma migrations inside API container
 
 ### 9.4 Environment Variables
 
@@ -721,7 +723,7 @@ Three services with health checks:
 | `PORT` | No | Default 5000 |
 | `NODE_ENV` | No | development / production / test |
 | `CORS_ORIGIN` | No | Default http://localhost:3000 |
-| `DATABASE_URL` | Yes | PostgreSQL connection string |
+| `DATABASE_URL` | Yes | Prisma Postgres connection string (`prisma+postgres://…`) |
 | `SUPABASE_URL` | Yes | Supabase project URL |
 | `SUPABASE_ANON_KEY` | Yes | Supabase anonymous key |
 | `SUPABASE_SERVICE_ROLE_KEY` | Yes | Supabase service role key |
@@ -746,8 +748,8 @@ Three services with health checks:
 | Zod over Joi | Smaller ecosystem | First-class TypeScript inference, shared client/server |
 | @dnd-kit over react-beautiful-dnd | Newer, less battle-tested | Active maintenance, headless design, React 19 support |
 | Socket.IO over raw WS | Larger bundle | Automatic reconnection, rooms, fallback transports |
-| PostgreSQL over NoSQL | Rigid schema | ACID compliance, relational integrity, Prisma support |
-| Docker Compose over K8s | No auto-scaling | Simpler ops for single-server deployment |
+| Prisma Postgres over self-hosted PG | Managed dependency | Zero-ops database, built-in connection pooling, Accelerate caching |
+| GCE + Docker Compose over K8s | Manual scaling | Simple single-server ops, full control, persistent WebSocket support |
 | Vitest over Jest (frontend) | Different from backend | Native ESM, faster, Vite integration |
 
 ---
@@ -761,4 +763,4 @@ Hintro's PERN architecture delivers a production-ready, real-time Kanban platfor
 - **Express 5 + Prisma 6** back end with Zod validation and Socket.IO real-time
 - **Supabase Auth** for managed authentication with role-based authorisation
 - **498 automated tests** (Vitest + Jest) with GitHub Actions CI/CD
-- **Docker Compose** deployment with PostgreSQL, API, and Web services
+- **Google Compute Engine** deployment with Docker Compose, Docker Hub, and Prisma Postgres

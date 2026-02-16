@@ -10,12 +10,12 @@ A full-stack Kanban board application built with the **PERN stack** (PostgreSQL,
 | ---------------- | -------------------------------------------------------------- |
 | Frontend         | Next.js 16, React 19, Zustand 5, Tailwind CSS 3, @dnd-kit     |
 | Backend          | Express 5, Prisma 6, Socket.IO 4, Zod 3                       |
-| Database         | PostgreSQL 16                                                  |
+| Database         | Prisma Postgres (managed PostgreSQL)                           |
 | Auth             | Supabase Auth (email/password, OAuth)                          |
 | Testing          | Vitest 4 (frontend — 348 tests), Jest 30 (backend — 150 tests)|
 | Monorepo         | Turborepo 2, pnpm 9                                           |
-| CI/CD            | GitHub Actions (lint → test → build → deploy)                  |
-| Containerization | Docker, Docker Compose                                         |
+| CI/CD            | GitHub Actions → Google Compute Engine                          |
+| Containerization | Docker, Docker Compose, Docker Hub                            |
 
 ---
 
@@ -56,7 +56,7 @@ A full-stack Kanban board application built with the **PERN stack** (PostgreSQL,
 │   ├── eslint-config/     # Shared ESLint configurations
 │   ├── typescript-config/ # Shared tsconfig presets
 │   └── ui/                # Shared React component library
-├── docker-compose.yml     # PostgreSQL + API + Web
+├── docker-compose.yml     # API + Web (Prisma Postgres)
 ├── turbo.json             # Turborepo pipeline config
 └── pnpm-workspace.yaml
 ```
@@ -69,7 +69,7 @@ A full-stack Kanban board application built with the **PERN stack** (PostgreSQL,
 | -------------- | -------- | ----------------------------------------------------------- |
 | Node.js        | ≥ 18     | Recommend 20 LTS                                            |
 | pnpm           | 9.x      | `corepack enable && corepack prepare pnpm@9.0.0 --activate` |
-| PostgreSQL     | 14+      | Or use Docker (see below)                                   |
+| Prisma Postgres| —        | Create at [prisma.io/postgres](https://www.prisma.io/postgres) |
 | Supabase       | —        | Free project at [supabase.com](https://supabase.com/dashboard) |
 
 ---
@@ -97,7 +97,7 @@ pnpm install
 PORT=5000
 NODE_ENV=development
 CORS_ORIGIN=http://localhost:3000
-DATABASE_URL=postgresql://hintro:hintro@localhost:5432/hintro?schema=public
+DATABASE_URL=prisma+postgres://accelerate.prisma-data.net/?api_key=<your-api-key>
 
 # Supabase  (Settings → API in your Supabase dashboard)
 SUPABASE_URL=https://<project-ref>.supabase.co
@@ -116,22 +116,13 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=<your-anon-key>
 
 ### 4. Set up the database
 
-**Option A — Local PostgreSQL:**
+Create a Prisma Postgres database at [prisma.io/postgres](https://www.prisma.io/postgres),
+then copy the connection string into your `apps/api/.env` as `DATABASE_URL`.
 
 ```bash
-createdb hintro
 cd apps/api
 pnpm db:generate   # generate Prisma client
 pnpm db:migrate    # run migrations
-```
-
-**Option B — Docker (PostgreSQL only):**
-
-```bash
-docker compose up postgres -d
-cd apps/api
-pnpm db:generate
-pnpm db:migrate
 ```
 
 > **Supabase setup:** Create a database trigger in your Supabase project to
@@ -156,33 +147,23 @@ Open **http://localhost:3000** in your browser.
 
 ---
 
-## Docker Compose (Full Stack)
+## Docker Compose (Local Testing)
 
-Run the entire stack in containers:
+Run both services locally in containers (database is Prisma Postgres — managed):
 
 ```bash
-# Copy env vars to root (Docker Compose reads from .env)
 cp apps/api/.env .env
-
-# Build and start all services
 docker compose up -d --build
-
-# Run migrations inside the container
 docker compose exec api npx prisma migrate deploy
-
-# Tail logs
 docker compose logs -f api web
-
-# Shut down
-docker compose down          # keep data
-docker compose down -v       # remove volumes too
 ```
 
-| Service    | Port | Description             |
-| ---------- | ---- | ----------------------- |
-| `postgres` | 5432 | PostgreSQL 16 Alpine    |
-| `api`      | 5000 | Express API + Socket.IO |
-| `web`      | 3000 | Next.js frontend        |
+| Service | Port | Description             |
+| ------- | ---- | ----------------------- |
+| `api`   | 5000 | Express API + Socket.IO |
+| `web`   | 3000 | Next.js frontend        |
+
+> Production deployment uses **Google Cloud Run** — see [Deployment](#deployment) below.
 
 ---
 
@@ -242,7 +223,7 @@ Runs on every push / PR to `master` or `develop`:
 
 1. **Lint & Type-check** — ESLint + TypeScript across all packages
 2. **Frontend Tests** — Vitest (parallel with backend)
-3. **Backend Tests** — Jest with PostgreSQL service container
+3. **Backend Tests** — Jest with PostgreSQL service container (CI only)
 4. **Build** — Full production build
 
 ### CD — `.github/workflows/cd.yml`
@@ -250,8 +231,21 @@ Runs on every push / PR to `master` or `develop`:
 Runs on push to `main`:
 
 1. CI gate (re-runs full pipeline)
-2. Build & push Docker images to GHCR
-3. SSH deploy → `docker compose up` on production
+2. Build & push Docker images to Docker Hub
+3. SSH into GCE VM → `docker compose up`
+4. Run Prisma migrations inside the API container
+
+## Deployment
+
+Production runs on a **Google Compute Engine** VM with Docker Compose.
+
+| Component | Platform                              |
+| --------- | ------------------------------------- |
+| API       | GCE VM (Docker Compose `api` service) |
+| Web       | GCE VM (Docker Compose `web` service) |
+| Database  | Prisma Postgres (managed)             |
+| Images    | Docker Hub                            |
+| Auth      | Supabase (managed)                    |
 
 ---
 
@@ -286,7 +280,7 @@ All endpoints (except health) require `Authorization: Bearer <supabase_access_to
 | `PORT`                       | No       | `5000`                    | API server port              |
 | `NODE_ENV`                   | No       | `development`             | Environment mode             |
 | `CORS_ORIGIN`                | No       | `http://localhost:3000`   | Allowed CORS origin          |
-| `DATABASE_URL`               | Yes      | —                         | PostgreSQL connection string |
+| `DATABASE_URL`               | Yes      | —                         | Prisma Postgres connection string (`prisma+postgres://…`) |
 | `SUPABASE_URL`               | Yes      | —                         | Supabase project URL         |
 | `SUPABASE_ANON_KEY`          | Yes      | —                         | Supabase anon / public key   |
 | `SUPABASE_SERVICE_ROLE_KEY`  | Yes      | —                         | Supabase service role key    |
@@ -302,14 +296,11 @@ All endpoints (except health) require `Authorization: Bearer <supabase_access_to
 
 ### Docker Compose (`.env` at project root)
 
-| Variable            | Default | Description            |
-| ------------------- | ------- | ---------------------- |
-| `POSTGRES_USER`     | hintro  | PostgreSQL username    |
-| `POSTGRES_PASSWORD`  | hintro  | PostgreSQL password    |
-| `POSTGRES_DB`       | hintro  | Database name          |
-| `POSTGRES_PORT`     | 5432    | Exposed PostgreSQL port|
-| `API_PORT`          | 5000    | Exposed API port       |
-| `WEB_PORT`          | 3000    | Exposed Web port       |
+| Variable            | Default | Description                         |
+| ------------------- | ------- | ----------------------------------- |
+| `DATABASE_URL`      | —       | Prisma Postgres connection string   |
+| `API_PORT`          | 5000    | Exposed API port                    |
+| `WEB_PORT`          | 3000    | Exposed Web port                    |
 
 ---
 
