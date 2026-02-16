@@ -2,9 +2,8 @@
 
 import { useEffect } from "react";
 import { useTaskStore } from "@/store/useTaskStore";
-import { useBoardStore } from "@/store/useBoardStore";
 import type { ActivityLogEntry } from "@/types";
-import { Clock, User, ArrowRightLeft, Plus, Pencil, Trash2, UserPlus, UserMinus } from "lucide-react";
+import { Clock, ArrowRightLeft, Plus, Pencil, Trash2, UserPlus, UserMinus } from "lucide-react";
 
 interface ActivityLogProps {
   boardId: string;

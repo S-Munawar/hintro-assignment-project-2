@@ -1,1322 +1,764 @@
+# Hintro — Architecture Document
+
 **Real-Time Task Collaboration Platform**
 
-End-to-End Architectural Document
-
-PERN Stack (PostgreSQL, Express, React, Node.js)
-
-Executive Summary
-
-This document outlines the complete architecture for a Real-Time Task
-Collaboration Platform (similar to Trello/Notion) built using the PERN
-stack. The platform enables users to create boards, organize tasks
-across multiple lists, collaborate in real-time, and track activity
-history. The architecture emphasizes scalability, maintainability, and
-seamless real-time synchronization across multiple concurrent users.
-
-Key Architectural Highlights
-
-- Frontend: React-based Single Page Application with Zustand for state
-  management
-- Backend: Node.js/Express REST API with GraphQL capability for
-  complex queries
-- Database: PostgreSQL with optimized schema and indexing strategies
-- Real-time: WebSocket implementation via Socket.io for instant
-  updates
-- Authentication: Supabase Auth for secure session management
-  (email/password, OAuth providers)
-- Monorepo: Turborepo for unified frontend & backend development
-- Deployment: Docker containerization with horizontal scaling support
-
-1\. System Overview
-
-1.1 High-Level Architecture
-
-The system follows a three-tier architecture:
-
-- Presentation Layer: React SPA with responsive UI
-- Application Layer: Express server with REST endpoints and Socket.io
-  for WebSockets
-- Data Layer: PostgreSQL database with optimized queries and indexing
-
-1.2 Technology Stack
+PERN Stack (PostgreSQL, Express, React/Next.js, Node.js)
 
 ---
 
-  **Layer**               **Technology**          **Purpose**
+## Executive Summary
 
-  Frontend                React 18+               UI components and user
-                                                  interactions
+This document describes the architecture of **Hintro**, a real-time Kanban board application built with the PERN stack. Users can create boards, organise tasks across lists, drag-and-drop across columns, collaborate in real-time via Socket.IO, and review a full activity audit trail.
 
-  State Management        Zustand                 Lightweight state
-                                                  management
+### Architectural Highlights
 
-  HTTP Client             Axios                   API requests with
-                                                  interceptors
-
-  Real-time               Socket.io               WebSocket communication
-
-  Backend Runtime         Node.js 18+             JavaScript runtime
-                                                  environment
-
-  Web Framework           Express.js              HTTP server and routing
-
-  Database                PostgreSQL 14+          Relational data
-                                                  persistence
-
-  ORM                     Prisma                  Type-safe database
-                                                  client and migrations
-
-  Authentication          Supabase Auth           Managed authentication
-                                                  (email, OAuth, sessions)
-
-  Validation              Joi                     Schema validation
-
-  Testing                 Jest + React Testing    Unit and integration
-                          Library                 tests
-
-  Monorepo                Turborepo               Unified build system,
-                                                  caching, task orchestration
-
-  Deployment              Docker                  Containerization
-
-  Environment             PM2 / Kubernetes        Process/orchestration
-                                                  management
+| Concern | Choice |
+|---|---|
+| Frontend | Next.js 16 (App Router) with React 19, Zustand 5, Tailwind CSS 3, @dnd-kit |
+| Backend | Express 5, Prisma 6, Socket.IO 4, Zod validation |
+| Database | PostgreSQL 16 with optimised indexes |
+| Real-time | Socket.IO (WebSocket + polling fallback) |
+| Auth | Supabase Auth (email/password, OAuth) |
+| Monorepo | Turborepo 2 with pnpm 9 workspaces |
+| Testing | Vitest 4 (frontend — 348 tests), Jest 30 (backend — 150 tests) |
+| CI/CD | GitHub Actions → Docker → GHCR → Docker Compose deploy |
 
 ---
 
-1.3 Monorepo Structure (Turborepo)
+## 1. System Overview
 
-The project is organized as a Turborepo monorepo with the following
-top-level layout:
+### 1.1 High-Level Architecture
 
-> /
->
-> ├── apps/
->
-> │ ├── web/ \# React frontend (SPA)
->
-> │ └── api/ \# Express backend (REST API + WebSockets)
->
-> ├── packages/
->
-> │ ├── shared/ \# Shared types, constants, validators
->
-> │ ├── eslint-config/ \# Shared ESLint configuration
->
-> │ └── tsconfig/ \# Shared TypeScript configuration
->
-> ├── turbo.json \# Turborepo pipeline configuration
->
-> ├── package.json \# Root package.json (workspaces)
->
-> └── docker-compose.yml \# Multi-service Docker setup
+Three-tier architecture:
 
-Turborepo Benefits
+1. **Presentation Layer** — Next.js 16 App Router with server/client components
+2. **Application Layer** — Express 5 REST API + Socket.IO for WebSockets
+3. **Data Layer** — PostgreSQL 16 via Prisma 6 ORM
 
-- Parallel builds - Frontend and backend build simultaneously
-- Remote caching - Shared build cache across team members and CI
-- Task pipelines - Defined dependency graph for build, lint, test
-- Shared packages - Common types, validators, and config reused
-  across apps
-- Single repository - Unified version control, PRs, and code reviews
+### 1.2 Technology Stack
 
-2\. Frontend Architecture
+| Layer | Technology | Version | Purpose |
+|---|---|---|---|
+| Frontend Framework | Next.js | 16.1.5 | SSR, routing, React server components |
+| UI Library | React | 19.2 | Component rendering |
+| State Management | Zustand | 5 | Lightweight client stores |
+| Drag & Drop | @dnd-kit | core 6.3, sortable 10.0 | Cross-list task reordering |
+| Styling | Tailwind CSS | 3.4 | Utility-first CSS |
+| HTTP Client | Axios | 1.7 | API requests with interceptors |
+| Real-time (client) | Socket.IO Client | 4.8 | WebSocket communication |
+| Icons | Lucide React | — | SVG icon library |
+| Backend Runtime | Node.js | ≥ 18 (20 recommended) | JavaScript runtime |
+| Web Framework | Express | 5.1 | HTTP server and routing |
+| ORM | Prisma | 6.8 | Type-safe DB client and migrations |
+| Database | PostgreSQL | 16 | Relational persistence |
+| Auth | Supabase Auth | 2.49 | Managed authentication |
+| Validation | Zod | 3.24 | Schema validation (shared package) |
+| Security | Helmet | 8.1 | HTTP security headers |
+| Rate Limiting | express-rate-limit | 7.5 | Request throttling |
+| Logging | Morgan | — | HTTP request logging |
+| Backend Tests | Jest | 30 | Unit + integration tests |
+| Frontend Tests | Vitest | 4 | Unit + component tests |
+| Monorepo | Turborepo | 2.8 | Build orchestration |
+| Package Manager | pnpm | 9.0 | Fast, disk-efficient |
+| Containerisation | Docker / Compose | — | Multi-service deployment |
 
-2.1 Component Structure
+### 1.3 Monorepo Structure
 
-The React frontend lives in apps/web/ and is organized into a modular
-component hierarchy:
+```
+/
+├── apps/
+│   ├── web/                 # Next.js 16 frontend (App Router)
+│   └── api/                 # Express 5 REST API + Socket.IO
+├── packages/
+│   ├── shared/              # Zod schemas, TypeScript types, enums
+│   ├── eslint-config/       # Shared ESLint configurations
+│   ├── typescript-config/   # Shared tsconfig presets
+│   └── ui/                  # Shared React component library
+├── docker-compose.yml       # PostgreSQL + API + Web
+├── turbo.json               # Pipeline: build, lint, check-types, dev
+├── pnpm-workspace.yaml      # apps/*, packages/*
+└── package.json             # Root with pnpm@9, Node ≥18
+```
 
-> apps/web/src/
->
-> ├── components/
->
-> │ ├── Auth/ \# Login, Signup, PasswordReset (via Supabase)
->
-> │ ├── Board/ \# Board view, List, Task components
->
-> │ ├── Task/ \# Task detail, Task editor, Task assignee
->
-> │ ├── Sidebar/ \# Navigation, Board list
->
-> │ ├── Common/ \# Button, Modal, Loader, Toast
->
-> │ └── Search/ \# Search bar, filters
->
-> ├── pages/
->
-> │ ├── BoardPage
->
-> │ ├── LoginPage
->
-> │ └── DashboardPage
->
-> ├── store/
->
-> │ ├── useAuthStore.js \# Auth state and actions
->
-> │ ├── useBoardStore.js \# Board state and actions
->
-> │ ├── useTaskStore.js \# Task state and actions
->
-> │ └── useActivityStore.js \# Activity state and actions
->
-> ├── services/
->
-> │ ├── api.js \# Axios instance with interceptors
->
-> │ ├── socketService.js
->
-> │ ├── supabaseClient.js \# Supabase client initialization
->
-> │ └── authService.js \# Wraps Supabase Auth methods
->
-> ├── hooks/
->
-> │ ├── useAuth.js
->
-> │ ├── useSocket.js
->
-> │ └── useBoard.js
->
-> ├── utils/
->
-> │ ├── constants.js
->
-> │ ├── validators.js
->
-> │ └── helpers.js
->
-> └── App.js
+**Turborepo pipeline** (`turbo.json`):
 
-2.2 State Management (Zustand)
-
-Zustand manages application-wide state using lightweight stores with
-colocated state and actions. Each store is a custom hook created via
-Zustand's create() function.
-
-Auth Store (useAuthStore)
-
-- State: user (id, email, name, avatar), isAuthenticated, session
-  (Supabase session object)
-- Actions: loginUser (via supabase.auth.signInWithPassword),
-  logoutUser (via supabase.auth.signOut), registerUser (via
-  supabase.auth.signUp), updateProfile, loginWithOAuth
-- Listens to supabase.auth.onAuthStateChange() to keep state in sync
-
-Board Store (useBoardStore)
-
-- State: boards (array), currentBoardId, isLoading, error
-- Actions: fetchBoards, createBoard, updateBoard, deleteBoard,
-  setCurrentBoard
-
-Task Store (useTaskStore)
-
-- State: tasks (by boardId), filter, sortBy, searchQuery
-- Actions: fetchTasks, createTask, updateTask, deleteTask,
-  dragAndDropTask, filterTasks
-
-Activity Store (useActivityStore)
-
-- State: activityLog (array), pagination
-- Actions: fetchActivityLog, addActivity, clearActivityLog
-
-Zustand Store Example
-
-> import { create } from 'zustand';
->
-> const useTaskStore = create((set, get) =\> ({
->
-> tasks: {},
->
-> filter: null,
->
-> sortBy: 'position',
->
-> searchQuery: '',
->
-> fetchTasks: async (boardId) =\> {
->
-> const res = await api.get(\`/boards/\${boardId}/tasks\`);
->
-> set({ tasks: { ...get().tasks, [boardId]: res.data } });
->
-> },
->
-> createTask: async (listId, taskData) =\> {
->
-> const res = await api.post(\`/lists/\${listId}/tasks\`, taskData);
->
-> // update tasks in store
->
-> },
->
-> updateTaskInState: (data) =\> {
->
-> // merge updated task into store
->
-> },
->
-> }));
-
-2.3 Real-time Updates
-
-Socket.io integration handles real-time events:
-
-Socket Events Handled
-
-- task:created - New task added to the board
-- task:updated - Task details changed
-- task:deleted - Task removed
-- task:moved - Task position changed (drag & drop)
-- user:joined - User connected to board
-- user:left - User disconnected
-- typing:start - User started editing
-- typing:stop - User stopped editing
-
-Implementation Pattern
-
-Custom hook useSocket manages WebSocket lifecycle:
-
-> const useSocket = (boardId) =\> {
->
-> useEffect(() =\> {
->
-> const socket = io(SOCKET_URL);
->
-> socket.emit(\'join-board\', { boardId });
->
-> socket.on(\'task:updated\', (data) =\> {
->
-> useTaskStore.getState().updateTaskInState(data);
->
-> });
->
-> return () =\> socket.disconnect();
->
-> }, \[boardId\]);
->
-> };
-
-2.4 Routing Architecture
+- `build` — depends on `^build` (topological)
+- `lint` — independent
+- `check-types` — depends on `^check-types`
+- `dev` — persistent, cached
 
 ---
 
-  **Route**               **Component**           **Authentication**
+## 2. Frontend Architecture
 
-  /                       DashboardPage           Required
+### 2.1 Project Structure
 
-  /login                  LoginPage               Not Required
+The frontend uses Next.js 16 **App Router** (not Pages Router):
 
-  /signup                 SignupPage              Not Required
+```
+apps/web/
+├── app/                         # App Router pages
+│   ├── layout.tsx               # Root layout (Providers, AuthGuard)
+│   ├── page.tsx                 # Dashboard (board list)
+│   ├── login/page.tsx           # Login form
+│   ├── signup/page.tsx          # Signup form
+│   ├── forgot-password/page.tsx # Password reset
+│   ├── settings/page.tsx        # User settings
+│   ├── auth/callback/page.tsx   # OAuth callback handler
+│   └── board/[boardId]/page.tsx # Kanban board view
+├── components/
+│   ├── Auth/                    # LoginForm, SignupForm, AuthGuard, AuthenticatedLayout
+│   ├── Board/                   # BoardCard, BoardHeader, ListColumn, CreateBoardModal,
+│   │                            #   CreateListForm, BoardMembersModal
+│   ├── Task/                    # TaskCard, TaskDetailModal, CreateTaskForm
+│   ├── Activity/                # ActivityLog
+│   ├── Layout/                  # Sidebar
+│   ├── Common/                  # Modal, Loader, Toast
+│   └── Providers.tsx            # Zustand + socket providers
+├── store/
+│   ├── useAuthStore.ts          # Auth state & Supabase actions
+│   ├── useBoardStore.ts         # Board CRUD state
+│   ├── useTaskStore.ts          # Task CRUD + drag-and-drop state
+│   ├── useSocketStore.ts        # Socket.IO connection state
+│   └── useToastStore.ts         # Toast notification state
+├── hooks/
+│   ├── useAuth.ts               # Auth lifecycle hook
+│   ├── useSocket.ts             # Socket.IO connection hook
+│   └── useBoardSocket.ts        # Board-specific socket events
+├── lib/
+│   ├── api.ts                   # Axios instance with auth interceptor
+│   ├── supabaseClient.ts        # Supabase browser client
+│   └── authService.ts           # Wraps Supabase Auth methods
+└── __tests__/                   # 348 Vitest tests
+    ├── components/
+    ├── hooks/
+    └── store/
+```
 
-  /board/:boardId         BoardPage               Required
+### 2.2 State Management (Zustand 5)
 
-  /task/:taskId           TaskDetailModal         Required
+Five stores manage application state:
 
-  /settings               SettingsPage            Required
+**Auth Store** (`useAuthStore`)
+- State: `user`, `session`, `isAuthenticated`, `isLoading`
+- Actions: `signIn`, `signUp`, `signOut`, `signInWithOAuth`, `updateProfile`
+- Listens to `supabase.auth.onAuthStateChange()` for session sync
+
+**Board Store** (`useBoardStore`)
+- State: `boards`, `currentBoard`, `isLoading`, `error`
+- Actions: `fetchBoards`, `createBoard`, `updateBoard`, `deleteBoard`, `setCurrentBoard`
+
+**Task Store** (`useTaskStore`)
+- State: `tasks` (keyed by list), `isLoading`
+- Actions: `fetchTasks`, `createTask`, `updateTask`, `deleteTask`, `moveTask`, `assignUser`, `unassignUser`
+- Supports optimistic drag-and-drop updates
+
+**Socket Store** (`useSocketStore`)
+- State: `socket`, `isConnected`
+- Actions: `connect`, `disconnect`, `joinBoard`, `leaveBoard`
+
+**Toast Store** (`useToastStore`)
+- State: `toasts` (array)
+- Actions: `addToast`, `removeToast`
+
+### 2.3 Drag & Drop (@dnd-kit)
+
+Task cards use `@dnd-kit/core` + `@dnd-kit/sortable`:
+
+- **`TaskCard`** — uses `useSortable` hook for drag handles, reduced opacity while dragging
+- **`ListColumn`** — wraps tasks in `SortableContext` with `verticalListSortingStrategy`, uses `useDroppable` for empty-list drop targets
+- **`BoardPage`** — `DndContext` with `pointerSensor`, `DragOverlay` for floating preview card, `onDragOver` handles cross-list moves, `onDragEnd` persists final position via API
+- Optimistic updates with rollback tracked via `dragOriginRef`
+
+### 2.4 Real-time Updates
+
+`useBoardSocket` hook manages Socket.IO event subscriptions per board:
+
+**Events handled:**
+
+| Event | Action |
+|---|---|
+| `task:created` | Add task to store |
+| `task:updated` | Merge updated task |
+| `task:deleted` | Remove task from store |
+| `task:moved` | Reposition task |
+| `board:updated` | Update board details |
+| `list:created` | Add list to store |
+| `list:updated` | Update list details |
+| `list:deleted` | Remove list from store |
+| `member:added` | Add member to board |
+| `member:removed` | Remove member from board |
+
+### 2.5 Routing
+
+| Route | Page Component | Auth |
+|---|---|---|
+| `/` | Dashboard (board list) | Required |
+| `/login` | LoginForm | Public |
+| `/signup` | SignupForm | Public |
+| `/forgot-password` | Password reset | Public |
+| `/board/[boardId]` | Kanban board view | Required |
+| `/settings` | User settings | Required |
+| `/auth/callback` | OAuth redirect handler | Public |
+
+`AuthGuard` component wraps protected routes and redirects unauthenticated users.
 
 ---
 
-3\. Backend Architecture
+## 3. Backend Architecture
 
-3.1 API Endpoints
+### 3.1 Express Server Structure
 
-REST API following RESTful conventions:
+```
+apps/api/
+├── src/
+│   ├── app.ts                    # Express 5 app + HTTP server + Socket.IO init
+│   ├── config/
+│   │   ├── database.ts           # Prisma client singleton
+│   │   └── env.ts                # Environment variable config
+│   ├── middleware/
+│   │   ├── auth.ts               # Supabase JWT verification
+│   │   ├── authorize.ts          # Role-based board membership check
+│   │   ├── validation.ts         # Zod schema validation
+│   │   └── errorHandler.ts       # Centralised error handler
+│   ├── routes/
+│   │   ├── boards.ts             # Board + member + list + activity routes
+│   │   ├── tasks.ts              # Task CRUD + move + assignee routes
+│   │   └── users.ts              # User search route
+│   ├── controllers/
+│   │   ├── boardController.ts    # Board CRUD + member management
+│   │   ├── listController.ts     # List create/update/delete
+│   │   ├── taskController.ts     # Task CRUD + move + assign/unassign
+│   │   ├── activityController.ts # Activity log retrieval
+│   │   └── userController.ts     # User search
+│   ├── services/
+│   │   ├── boardService.ts       # Board business logic
+│   │   ├── listService.ts        # List business logic
+│   │   ├── taskService.ts        # Task business logic
+│   │   ├── activityService.ts    # Activity logging
+│   │   ├── userService.ts        # User search logic
+│   │   └── socketService.ts      # Socket.IO initialisation + event types
+│   └── utils/
+│       ├── logger.ts             # Winston/console logger
+│       └── supabase.ts           # Supabase admin client (service role)
+├── prisma/
+│   ├── schema.prisma             # 7 models, 4 enums, indexes
+│   └── migrations/               # SQL migrations
+└── package.json
+```
 
-Authentication
+### 3.2 Middleware Stack (in order)
 
-Authentication is fully handled by Supabase Auth on the client side.
-The backend does not expose custom auth endpoints. Instead, the
-frontend uses the Supabase JS SDK for signup, login, logout, password
-reset, and OAuth flows. The backend verifies Supabase JWT tokens on
-each protected request via middleware.
+1. **Helmet** — HTTP security headers
+2. **CORS** — Restricted to `CORS_ORIGIN`
+3. **Body Parser** — JSON (1MB limit) + URL-encoded
+4. **Morgan** — HTTP request logging (disabled in test)
+5. **Rate Limiter** — 100 requests / 15 minutes on `/api` routes
+6. **Auth Middleware** — Verifies Supabase JWT, attaches `req.userId`
+7. **Authorise Middleware** — Checks board membership + role (`admin`, `editor`, `viewer`)
+8. **Validation Middleware** — Validates request body/query against Zod schemas from `@repo/shared`
+9. **Error Handler** — Consistent `{ success: false, error: { code, message } }` format
 
-Supabase Auth Features Used
+### 3.3 API Endpoints
 
-- Email/password signup and login
-- OAuth providers (Google, GitHub)
-- Magic link login (optional)
-- Password reset via Supabase email templates
-- Automatic session/token refresh handled by Supabase SDK
+#### Health
 
----
+| Method | Endpoint | Description |
+|---|---|---|
+| GET | `/api/health` | Health check (status, uptime, timestamp) |
 
-Board Endpoints
+#### Boards
 
----
+| Method | Endpoint | Auth | Roles | Description |
+|---|---|---|---|---|
+| GET | `/api/boards` | ✓ | any | List user's boards (paginated) |
+| POST | `/api/boards` | ✓ | any | Create new board |
+| GET | `/api/boards/:boardId` | ✓ | member | Get board with lists & tasks |
+| PUT | `/api/boards/:boardId` | ✓ | admin | Update board |
+| DELETE | `/api/boards/:boardId` | ✓ | owner | Delete board |
 
-  **Method**              **Endpoint**                           **Description**
+#### Members
 
-  GET                     /api/boards                            List user\'s boards
-                                                                 (paginated)
+| Method | Endpoint | Auth | Roles | Description |
+|---|---|---|---|---|
+| POST | `/api/boards/:boardId/members` | ✓ | admin | Add member to board |
+| DELETE | `/api/boards/:boardId/members/:userId` | ✓ | member | Remove member |
 
-  POST                    /api/boards                            Create new board
+#### Lists
 
-  GET                     /api/boards/:boardId                   Get board details with
-                                                                 lists
+| Method | Endpoint | Auth | Roles | Description |
+|---|---|---|---|---|
+| POST | `/api/boards/:boardId/lists` | ✓ | admin, editor | Create list |
+| PUT | `/api/boards/:boardId/lists/:listId` | ✓ | admin, editor | Update list |
+| DELETE | `/api/boards/:boardId/lists/:listId` | ✓ | admin | Delete list |
 
-  PUT                     /api/boards/:boardId                   Update board
+#### Tasks
 
-  DELETE                  /api/boards/:boardId                   Delete board
+| Method | Endpoint | Auth | Roles | Description |
+|---|---|---|---|---|
+| GET | `/api/boards/:boardId/tasks` | ✓ | member | List tasks (filtered, paginated) |
+| POST | `/api/boards/:boardId/tasks` | ✓ | admin, editor | Create task |
+| GET | `/api/boards/:boardId/tasks/:taskId` | ✓ | member | Get task detail |
+| PUT | `/api/boards/:boardId/tasks/:taskId` | ✓ | admin, editor | Update task |
+| DELETE | `/api/boards/:boardId/tasks/:taskId` | ✓ | admin, editor | Delete task |
+| PUT | `/api/boards/:boardId/tasks/:taskId/move` | ✓ | admin, editor | Move task (drag & drop) |
+| POST | `/api/boards/:boardId/tasks/:taskId/assignees` | ✓ | admin, editor | Assign user |
+| DELETE | `/api/boards/:boardId/tasks/:taskId/assignees/:userId` | ✓ | admin, editor | Unassign user |
 
-  POST                    /api/boards/:boardId/members           Add member to board
+#### Activity
 
-  DELETE                  /api/boards/:boardId/members/:userId   Remove member from
-                                                                 board
+| Method | Endpoint | Auth | Roles | Description |
+|---|---|---|---|---|
+| GET | `/api/boards/:boardId/activity` | ✓ | member | Activity log (paginated, filterable by task) |
 
----
+#### Users
 
-Task Endpoints
+| Method | Endpoint | Auth | Description |
+|---|---|---|---|
+| GET | `/api/users/search?q=...&limit=...` | ✓ | Search users by name/email |
 
----
+### 3.4 Validation Schemas (Zod — `@repo/shared`)
 
-  **Method**              **Endpoint**                        **Description**
+All input validation is handled by Zod schemas in `packages/shared/src/schemas/`:
 
-  GET                     /api/boards/:boardId/tasks          Get all tasks in board
-                                                              (with filters)
+| Schema | Fields |
+|---|---|
+| `CreateBoardInput` | `name` (1-255), `description?`, `color?` (#hex) |
+| `UpdateBoardInput` | `name?`, `description?`, `color?`, `is_archived?` |
+| `AddBoardMemberInput` | `user_id` (uuid), `role?` (admin/editor/viewer) |
+| `CreateListInput` | `name` (1-255), `position?` (int) |
+| `UpdateListInput` | `name?`, `position?` |
+| `CreateTaskInput` | `list_id` (uuid), `title` (1-255), `description?`, `priority?`, `due_date?` |
+| `UpdateTaskInput` | `title?`, `description?`, `position?`, `priority?`, `due_date?`, `is_completed?`, `list_id?` |
+| `MoveTaskInput` | `list_id` (uuid), `position` (int) |
+| `AssignUserInput` | `user_id` (uuid) |
+| `PaginationQuery` | `page` (default 1), `limit` (max 100), `sort?`, `order` (asc/desc) |
+| `TaskFilterQuery` | extends Pagination + `search?`, `priority?`, `is_completed?`, `list_id?`, `assigned_to?` |
+| `ActivityFilterQuery` | extends Pagination + `task_id?` |
+| `UserSearchQuery` | `q` (1-255), `limit` (max 20) |
 
-  POST                    /api/lists/:listId/tasks            Create task in list
+### 3.5 Authentication Flow (Supabase)
 
-  GET                     /api/tasks/:taskId                  Get task details
+**Login Flow:**
+1. Frontend calls `supabase.auth.signInWithPassword({ email, password })`
+2. Supabase returns session with access token & refresh token
+3. `useAuthStore` listens to `onAuthStateChange()` and updates state
+4. Axios interceptor attaches `Authorization: Bearer <token>` to API requests
 
-  PUT                     /api/tasks/:taskId                  Update task
+**OAuth Flow:**
+1. Frontend calls `supabase.auth.signInWithOAuth({ provider: 'google' | 'github' })`
+2. User redirected to provider → back to `/auth/callback`
+3. Supabase establishes session automatically
 
-  DELETE                  /api/tasks/:taskId                  Delete task
+**Backend Verification:**
+1. `authMiddleware` extracts Bearer token from `Authorization` header
+2. Calls `supabase.auth.getUser(token)` via Supabase admin client
+3. Attaches `req.userId` from token claims
+4. `authorize()` middleware checks `board_members` table for role-based access
 
-  PUT                     /api/tasks/:taskId/position         Update task position
-                                                              (drag/drop)
+### 3.6 Service Layer
 
-  POST                    /api/tasks/:taskId/assign           Assign user to task
-
-  DELETE                  /api/tasks/:taskId/assign/:userId   Unassign user from task
-
----
-
-Activity Endpoints
-
----
-
-  **Method**              **Endpoint**                    **Description**
-
-  GET                     /api/boards/:boardId/activity   Get activity log
-                                                          (paginated)
-
-  GET                     /api/tasks/:taskId/activity     Get task activity
-
----
-
-3.2 Express Server Structure
-
-The backend lives in apps/api/ within the Turborepo monorepo:
-
-> apps/api/
->
-> ├── src/
->
-> │ ├── config/
->
-> │ │ ├── database.js \# Database connection
->
-> │ │ └── env.js \# Environment variables
->
-> │ ├── middleware/
->
-> │ │ ├── auth.js \# Supabase JWT verification
->
-> │ │ ├── errorHandler.js \# Error handling
->
-> │ │ └── validation.js \# Request validation
->
-> │ ├── routes/
->
-> │ │ ├── boards.js
->
-> │ │ ├── tasks.js
->
-> │ │ └── activity.js
->
-> │ ├── controllers/
->
-> │ │ ├── boardController.js
->
-> │ │ └── taskController.js
->
-> │ ├── services/
->
-> │ │ ├── boardService.js
->
-> │ │ └── taskService.js
->
-> │ ├── sockets/
->
-> │ │ └── handlers.js \# WebSocket event handlers
->
-> │ ├── utils/
->
-> │ │ ├── logger.js
->
-> │ │ ├── supabase.js \# Supabase admin client (service role key)
->
-> │ │ └── pagination.js
->
-> │ └── app.js
->
-> ├── prisma/
->
-> │ └── schema.prisma \# Prisma schema (models, relations, enums)
->
-> └── package.json
-
-3.3 Middleware Stack
-
-- CORS Middleware - Allow cross-origin requests from frontend
-- Body Parser - Parse JSON and URL-encoded request bodies
-- Authentication Middleware - Verify Supabase JWT tokens on protected
-  routes using supabase.auth.getUser() or JWT verification with
-  Supabase JWT secret
-- Authorization Middleware - Check user permissions for resources
-- Request Validation - Validate incoming data using Joi schemas
-- Error Handler - Centralized error handling with consistent response
-  format
-- Request Logger - Log all incoming requests for debugging
-
-3.4 Authentication Flow (Supabase)
-
-Login Flow
-
-- User submits email and password on the frontend
-- Frontend calls supabase.auth.signInWithPassword({ email, password })
-- Supabase validates credentials and returns a session with access
-  token and refresh token
-- Supabase JS SDK automatically stores the session and manages token
-  refresh
-- useAuthStore listens to onAuthStateChange() and updates state
-
-OAuth Login Flow
-
-- User clicks "Sign in with Google/GitHub"
-- Frontend calls supabase.auth.signInWithOAuth({ provider })
-- User is redirected to OAuth provider, then back to the app
-- Supabase handles the callback and establishes the session
-
-Protected Route Access
-
-- Frontend retrieves the access token from Supabase session via
-  supabase.auth.getSession()
-- Sends request with access token in Authorization: Bearer header
-- Backend middleware verifies the Supabase JWT using the Supabase JWT
-  secret (SUPABASE_JWT_SECRET) or calls supabase.auth.getUser(token)
-- If valid, attach user ID from token claims to request and proceed
-- If expired, Supabase SDK auto-refreshes on the client side
-- If session invalid, redirect to login
-
-3.5 Service Layer Architecture
-
-Services encapsulate business logic, separated from controllers:
-
-Board Service
-
-- getBoardsForUser(userId) - Fetch all boards with member count
-- createBoard(userId, boardData) - Create board with initial list
-- getBoardWithLists(boardId) - Get board with all lists and tasks
-- updateBoard(boardId, userId, data) - Update board with permission
-  check
-- deleteBoard(boardId, userId) - Delete board and cascade delete tasks
-- addMember(boardId, userId, newMemberId) - Add user to board
-
-Task Service
-
-- getTasksByBoardId(boardId, filters) - Get tasks with pagination and
-  filtering
-- createTask(listId, taskData) - Create task in list
-- updateTask(taskId, userId, data) - Update task details
-- deleteTask(taskId, userId) - Delete task and its activities
-- moveTask(taskId, targetListId, position) - Handle drag & drop
-- assignUser(taskId, userId) - Assign user to task
-
-4\. Database Design (PostgreSQL)
-
-4.1 Entity-Relationship Diagram
-
-The database schema consists of the following core entities:
-
-Tables Overview
-
-- auth.users - Managed by Supabase Auth (stores credentials, email,
-  OAuth identities)
-- profiles - Application-specific user profile data (linked to
-  auth.users via id)
-- boards - Task boards
-- board_members - Board membership and roles
-- lists - Task lists within boards
-- tasks - Individual tasks
-- task_assignees - Task-user assignment mapping
-- activity_logs - Activity history
-
-4.2 Detailed Schema
-
-profiles Table
-
-(Linked to Supabase auth.users — user credentials, email, and
-password are managed entirely by Supabase Auth. This table stores
-application-specific profile data.)
+| Service | Key Methods |
+|---|---|
+| `boardService` | `getBoardsForUser`, `createBoard`, `getBoardWithLists`, `updateBoard`, `deleteBoard`, `addMember`, `removeMember` |
+| `listService` | `createList`, `updateList`, `deleteList` |
+| `taskService` | `getTasksByBoardId`, `createTask`, `getTaskById`, `updateTask`, `deleteTask`, `moveTask`, `assignUser`, `unassignUser` |
+| `activityService` | `getActivity`, `logActivity` |
+| `userService` | `searchUsers` |
+| `socketService` | `initSocketIO`, `getIO`, `emitToBoard` |
 
 ---
 
-  **Column**        **Type**          **Constraints**      **Notes**
+## 4. Database Design (PostgreSQL 16)
 
-  id                UUID              PRIMARY KEY,         References
-                                      REFERENCES           auth.users.id
-                                      auth.users(id)
+### 4.1 Schema Overview
 
-  email             VARCHAR(255)      UNIQUE, NOT NULL     Synced from
-                                                           Supabase auth
+Managed by **Prisma 6** with migrations. 7 models + 4 enums:
 
-  first_name        VARCHAR(100)      NOT NULL
+```
+auth.users (Supabase-managed)
+    │
+    └── profiles (1:1, trigger-created on signup)
+            │
+            ├── boards (owner_id)
+            │     ├── board_members (user_id + role)
+            │     ├── lists (position-ordered)
+            │     │     └── tasks (position-ordered)
+            │     │           └── task_assignees
+            │     └── activity_logs
+            └── (created_tasks, task_assignees, activity_logs)
+```
 
-  last_name         VARCHAR(100)      NOT NULL
+### 4.2 Enums
 
-  avatar_url        TEXT              NULLABLE             Profile picture
-                                                           URL
+```sql
+TaskPriority: low | medium | high | urgent
+BoardRole:    admin | editor | viewer
+ActionType:   create | update | delete | move
+EntityType:   board | list | task | comment
+```
 
-  is_active         BOOLEAN           DEFAULT true         Account status
+### 4.3 Tables
 
-  created_at        TIMESTAMP         DEFAULT NOW()        Profile creation
-                                                           time
+#### profiles
 
-  updated_at        TIMESTAMP         DEFAULT NOW()        Last update time
+| Column | Type | Constraints |
+|---|---|---|
+| `id` | UUID | PK, references auth.users(id) |
+| `email` | VARCHAR(255) | UNIQUE, NOT NULL |
+| `first_name` | VARCHAR(100) | NOT NULL |
+| `last_name` | VARCHAR(100) | NOT NULL |
+| `avatar_url` | TEXT | nullable |
+| `is_active` | BOOLEAN | DEFAULT true |
+| `created_at` | TIMESTAMP | DEFAULT now() |
+| `updated_at` | TIMESTAMP | @updatedAt |
 
----
+> A Supabase database trigger auto-creates a `profiles` row when a new user signs up.
 
-Note: A database trigger or Supabase Auth hook automatically creates a
-row in the profiles table when a new user signs up via Supabase Auth.
+#### boards
 
----
+| Column | Type | Constraints |
+|---|---|---|
+| `id` | UUID | PK, auto-generated |
+| `owner_id` | UUID | FK → profiles(id), ON DELETE CASCADE |
+| `name` | VARCHAR(255) | NOT NULL |
+| `description` | TEXT | nullable |
+| `color` | VARCHAR(7) | DEFAULT '#4472C4' |
+| `is_archived` | BOOLEAN | DEFAULT false |
+| `created_at` | TIMESTAMP | DEFAULT now() |
+| `updated_at` | TIMESTAMP | @updatedAt |
 
-boards Table
+#### board_members
 
----
+| Column | Type | Constraints |
+|---|---|---|
+| `id` | UUID | PK |
+| `board_id` | UUID | FK → boards, ON DELETE CASCADE |
+| `user_id` | UUID | FK → profiles, ON DELETE CASCADE |
+| `role` | BoardRole | DEFAULT 'editor' |
+| `joined_at` | TIMESTAMP | DEFAULT now() |
+| | | UNIQUE(board_id, user_id) |
 
-  **Column**        **Type**          **Constraints**   **Notes**
+#### lists
 
-  id                UUID              PRIMARY KEY
+| Column | Type | Constraints |
+|---|---|---|
+| `id` | UUID | PK |
+| `board_id` | UUID | FK → boards, ON DELETE CASCADE |
+| `name` | VARCHAR(255) | NOT NULL |
+| `position` | INTEGER | NOT NULL |
+| `created_at` | TIMESTAMP | DEFAULT now() |
+| `updated_at` | TIMESTAMP | @updatedAt |
 
-  owner_id          UUID              FOREIGN           Board creator
-                                      KEY(users)
+#### tasks
 
-  name              VARCHAR(255)      NOT NULL          Board name
+| Column | Type | Constraints |
+|---|---|---|
+| `id` | UUID | PK |
+| `list_id` | UUID | FK → lists, ON DELETE CASCADE |
+| `title` | VARCHAR(255) | NOT NULL |
+| `description` | TEXT | nullable |
+| `position` | INTEGER | NOT NULL |
+| `priority` | TaskPriority | DEFAULT 'medium' |
+| `due_date` | DATE | nullable |
+| `is_completed` | BOOLEAN | DEFAULT false |
+| `created_by` | UUID | FK → profiles, ON DELETE CASCADE |
+| `created_at` | TIMESTAMP | DEFAULT now() |
+| `updated_at` | TIMESTAMP | @updatedAt |
 
-  description       TEXT              NULLABLE          Board description
+#### task_assignees
 
-  color             VARCHAR(7)        DEFAULT           Background color
-                                      \'#4472C4\'
+| Column | Type | Constraints |
+|---|---|---|
+| `id` | UUID | PK |
+| `task_id` | UUID | FK → tasks, ON DELETE CASCADE |
+| `user_id` | UUID | FK → profiles, ON DELETE CASCADE |
+| `assigned_at` | TIMESTAMP | DEFAULT now() |
+| | | UNIQUE(task_id, user_id) |
 
-  is_archived       BOOLEAN           DEFAULT false     Archive status
+#### activity_logs
 
-  created_at        TIMESTAMP         DEFAULT NOW()
+| Column | Type | Constraints |
+|---|---|---|
+| `id` | UUID | PK |
+| `board_id` | UUID | FK → boards, ON DELETE CASCADE |
+| `task_id` | UUID | FK → tasks, ON DELETE SET NULL, nullable |
+| `user_id` | UUID | FK → profiles, ON DELETE CASCADE |
+| `action_type` | ActionType | NOT NULL |
+| `entity_type` | EntityType | NOT NULL |
+| `changes` | JSONB | nullable |
+| `created_at` | TIMESTAMP | DEFAULT now() |
 
-  updated_at        TIMESTAMP         DEFAULT NOW()
+### 4.4 Indexing Strategy
 
----
-
-lists Table
-
----
-
-  **Column**        **Type**          **Constraints**   **Notes**
-
-  id                UUID              PRIMARY KEY
-
-  board_id          UUID              FOREIGN           Parent board
-                                      KEY(boards)
-
-  name              VARCHAR(255)      NOT NULL          List name
-
-  position          INTEGER           NOT NULL          Display order
-
-  created_at        TIMESTAMP         DEFAULT NOW()
-
-  updated_at        TIMESTAMP         DEFAULT NOW()
-
----
-
-tasks Table
-
----
-
-  **Column**        **Type**                            **Constraints**   **Notes**
-
-  id                UUID                                PRIMARY KEY
-
-  list_id           UUID                                FOREIGN           Parent list
-                                                        KEY(lists)
-
-  title             VARCHAR(255)                        NOT NULL          Task title
-
-  description       TEXT                                NULLABLE          Task description
-
-  position          INTEGER                             NOT NULL          Display order
-
-  priority          ENUM(\'low\',\'medium\',\'high\')   DEFAULT           Task priority
-                                                        \'medium\'
-
-  due_date          DATE                                NULLABLE          Deadline
-
-  is_completed      BOOLEAN                             DEFAULT false     Completion status
-
-  created_by        UUID                                FOREIGN           Task creator
-                                                        KEY(users)
-
-  created_at        TIMESTAMP                           DEFAULT NOW()
-
-  updated_at        TIMESTAMP                           DEFAULT NOW()
-
----
-
-task_assignees Table
-
----
-
-  **Column**        **Type**          **Constraints**   **Notes**
-
-  id                UUID              PRIMARY KEY
-
-  task_id           UUID              FOREIGN           Assigned task
-                                      KEY(tasks)
-
-  user_id           UUID              FOREIGN           Assigned user
-                                      KEY(users)
-
-  assigned_at       TIMESTAMP         DEFAULT NOW()     Assignment time
-
-  CONSTRAINT        UNIQUE(task_id,                     Prevent
-                    user_id)                            duplicates
-
----
-
-activity_logs Table
+| Index | Table | Columns | Purpose |
+|---|---|---|---|
+| `idx_boards_owner_id` | boards | (owner_id) | Find user's boards |
+| `idx_board_members_user` | board_members | (user_id) | Find user's memberships |
+| `idx_tasks_list_position` | tasks | (list_id, position) | Optimise task ordering |
+| `idx_tasks_created_by` | tasks | (created_by) | Find user's created tasks |
+| `idx_task_assignees_user` | task_assignees | (user_id) | Find user's assigned tasks |
+| `idx_activity_board_time` | activity_logs | (board_id, created_at DESC) | Activity timeline queries |
 
 ---
 
-  **Column**        **Type**                                          **Constraints**   **Notes**
+## 5. Real-time Communication (Socket.IO 4)
 
-  id                UUID                                              PRIMARY KEY
+### 5.1 Architecture
 
-  board_id          UUID                                              FOREIGN           Related board
-                                                                      KEY(boards)
+Socket.IO runs on the same HTTP server as Express. Authentication is performed during the WebSocket handshake via middleware that validates the Supabase JWT.
 
-  task_id           UUID                                              FOREIGN           Related task
-                                                                      KEY(tasks),       (optional)
-                                                                      NULLABLE
+### 5.2 Event Types
 
-  user_id           UUID                                              FOREIGN           User who made
-                                                                      KEY(users)        change
+**Client → Server:**
 
-  action_type       ENUM(\'create\',\'update\',\'delete\',\'move\')                     Type of action
+| Event | Payload | Action |
+|---|---|---|
+| `join-board` | `boardId: string` | Join socket room `board:{boardId}` |
+| `leave-board` | `boardId: string` | Leave socket room |
 
-  entity_type       ENUM(\'board\',\'list\',\'task\',\'comment\')                       Entity affected
+**Server → Client** (broadcast to board room via REST controllers):
 
-  changes           JSONB                                             NULLABLE          Field changes as
-                                                                                        JSON
+| Event | Payload |
+|---|---|
+| `task:created` | `{ boardId, task }` |
+| `task:updated` | `{ boardId, task }` |
+| `task:deleted` | `{ boardId, taskId, listId }` |
+| `task:moved` | `{ boardId, task }` |
+| `board:updated` | `{ boardId, board }` |
+| `list:created` | `{ boardId, list }` |
+| `list:updated` | `{ boardId, list }` |
+| `list:deleted` | `{ boardId, listId }` |
+| `member:added` | `{ boardId, member }` |
+| `member:removed` | `{ boardId, userId }` |
 
-  created_at        TIMESTAMP                                         DEFAULT NOW()     Timestamp
+### 5.3 Implementation Pattern
 
----
+Events are **not** initiated via WebSocket. Instead:
+1. Client makes REST API call (e.g., `PUT /api/boards/:boardId/tasks/:taskId`)
+2. Controller calls service layer → database update
+3. Controller calls `emitToBoard(boardId, event, data)` to broadcast
+4. All connected clients in the board room receive the event
+5. Frontend stores update state reactively
 
-board_members Table
+### 5.4 Connection Authentication
 
----
-
-  **Column**        **Type**                                **Constraints**   **Notes**
-
-  id                UUID                                    PRIMARY KEY
-
-  board_id          UUID                                    FOREIGN           Board
-                                                            KEY(boards)
-
-  user_id           UUID                                    FOREIGN           User
-                                                            KEY(users)
-
-  role              ENUM(\'admin\',\'editor\',\'viewer\')   DEFAULT           User role
-                                                            \'editor\'
-
-  joined_at         TIMESTAMP                               DEFAULT NOW()
-
-  CONSTRAINT        UNIQUE(board_id, user_id)                                 Prevent
-                                                                              duplicates
-
----
-
-4.3 Indexing Strategy
-
----
-
-  **Index Name**            **Table**         **Columns**            **Benefit**
-
-  idx_tasks_list_position   tasks             (list_id, position)    Optimize task
-                                                                     sorting
-
-  idx_tasks_board_id        tasks             (list_id-\>board_id)   Find tasks by
-                                                                     board
-
-  idx_tasks_created_by      tasks             (created_by)           Find user\'s
-                                                                     tasks
-
-  idx_boards_owner_id       boards            (owner_id)             Find user\'s
-                                                                     boards
-
-  idx_activity_board_time   activity_logs     (board_id, created_at  Activity timeline
-                                              DESC)
-
-  idx_board_members_user    board_members     (user_id)              Find user\'s
-                                                                     boards
-
-  idx_task_assignees_user   task_assignees    (user_id)              Find user\'s
-                                                                     tasks
-
-  idx_users_email           users             (email)                Fast user lookup
+```typescript
+// Socket.IO auth middleware (simplified)
+io.use(async (socket, next) => {
+  const token = socket.handshake.auth?.token;
+  const { data: { user } } = await supabase.auth.getUser(token);
+  if (!user) return next(new Error("Invalid token"));
+  socket.userId = user.id;
+  next();
+});
+```
 
 ---
 
-4.4 SQL Queries - Key Operations
+## 6. API Contract Design
 
-Get all tasks for a board (with pagination)
+### 6.1 Response Format
 
-> SELECT t.\*, l.name as list_name, u.first_name, u.last_name
->
-> FROM tasks t
->
-> JOIN lists l ON t.list_id = l.id
->
-> JOIN users u ON t.created_by = u.id
->
-> WHERE l.board_id = \$1
->
-> ORDER BY l.position, t.position
->
-> LIMIT \$2 OFFSET \$3;
+**Success (200/201):**
+```json
+{
+  "success": true,
+  "data": { ... },
+  "message": "Operation successful",
+  "pagination": { "page": 1, "limit": 10, "total": 45, "pages": 5 }
+}
+```
 
-Get task with assignees
+**Error (4xx/5xx):**
+```json
+{
+  "success": false,
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "message": "Invalid input",
+    "details": [ ... ]
+  }
+}
+```
 
-> SELECT t.\*, json_agg(json_build_object(
->
-> \'id\', u.id, \'name\', u.first_name \|\| \' \' \|\| u.last_name
->
-> )) as assignees
->
-> FROM tasks t
->
-> LEFT JOIN task_assignees ta ON t.id = ta.task_id
->
-> LEFT JOIN users u ON ta.user_id = u.id
->
-> WHERE t.id = \$1
->
-> GROUP BY t.id;
+### 6.2 Authentication Header
 
-5\. Real-time Communication (WebSockets)
+```
+Authorization: Bearer <supabase_access_token>
+```
 
-5.1 Socket.io Architecture
+### 6.3 Pagination
 
-Socket.io provides bidirectional, event-based communication between
-client and server.
+```
+GET /api/boards?page=1&limit=10&sort=created_at&order=desc
+```
 
-5.2 Event Flow
+### 6.4 Task Filtering
 
-Client → Server Events
+```
+GET /api/boards/:boardId/tasks?search=auth&priority=high&is_completed=false&list_id=<uuid>&assigned_to=<uuid>
+```
 
 ---
 
-  **Event**               **Payload**             **Handler**
+## 7. Security
 
-  join-board              {boardId: string}       Add to socket room,
-                                                  fetch updates
+### 7.1 Authentication
 
-  leave-board             {boardId: string}       Remove from socket room
+- Delegated to **Supabase Auth** — no custom auth logic on backend
+- Supported methods: email/password, Google OAuth, GitHub OAuth
+- JWTs signed with project-specific secret, verified on every API request
+- Auto-refresh handled by Supabase client SDK
 
-  task:create             {listId, title, \...}   Create task, broadcast
-                                                  to room
+### 7.2 Authorisation
 
-  task:update             {taskId, updates}       Update task, broadcast
-                                                  changes
+| Role | Permissions | Scope |
+|---|---|---|
+| Owner | Full control, delete board, manage members | Board |
+| Admin | Update board, manage members, all task/list ops | Board |
+| Editor | Create, edit, delete, move tasks and lists | Board |
+| Viewer | Read-only access | Board |
 
-  task:delete             {taskId}                Delete task, notify
-                                                  room
+### 7.3 API Security Measures
 
-  task:move               {taskId, targetListId,  Move task, broadcast
-                          position}
-
-  typing:start            {taskId, userId}        Broadcast user is
-                                                  editing
-
-  typing:stop             {taskId, userId}        Broadcast user stopped
-                                                  editing
-
----
-
-Server → Client Events
+- **Helmet** — Security headers (CSP, HSTS, X-Frame-Options, etc.)
+- **CORS** — Restricted to `CORS_ORIGIN` environment variable
+- **Rate Limiting** — 100 requests per 15 minutes per IP on `/api` routes
+- **Input Validation** — All inputs validated with Zod schemas before processing
+- **SQL Injection Prevention** — Parameterised queries via Prisma ORM
+- **HTTPS** — Required in production
 
 ---
 
-  **Event**               **Payload**             **Broadcast To**
+## 8. Testing
 
-  task:created            {task object}           All in board room
+### 8.1 Backend (Jest 30)
 
-  task:updated            {taskId, changes}       All in board room
+- **150 tests** covering controllers, services, middleware
+- Supertest for HTTP integration tests
+- Mocked Prisma client and Supabase auth
+- ESM support via `--experimental-vm-modules`
 
-  task:deleted            {taskId}                All in board room
+### 8.2 Frontend (Vitest 4)
 
-  task:moved              {taskId, newListId,     All in board room
-                          position}
+- **348 tests** covering components, hooks, stores
+- React Testing Library for component tests
+- Mocked API calls, Socket.IO, Supabase client, @dnd-kit hooks
+- jsdom environment
 
-  user:joined             {userId, userName}      All in board room
-
-  user:left               {userId}                All in board room
-
-  sync:update             {timestamp, entities}   All in board room
-
-  error                   {message}               Requesting client only
-
----
-
-5.3 Server-side Implementation
-
-> const io = require(\'socket.io\')(server, { cors: {\...} });
->
-> io.on(\'connection\', (socket) =\> {
->
-> socket.on(\'join-board\', async ({ boardId }) =\> {
->
-> socket.join(\`board:\${boardId}\`);
->
-> // Fetch and send current state
->
-> const board = await Board.findById(boardId).populate(\'tasks\');
->
-> socket.emit(\'board:loaded\', board);
->
-> });
->
-> socket.on(\'task:create\', async ({ listId, title }) =\> {
->
-> const task = await Task.create({\...});
->
-> io.to(\`board:\${boardId}\`).emit(\'task:created\', task);
->
-> await logActivity({\...});
->
-> });
->
-> });
-
-5.4 Conflict Resolution
-
-When multiple users edit simultaneously:
-
-- Last-Write-Wins (LWW) - For simple updates, timestamp determines
-  winner
-- Operational Transform (OT) - For collaborative editing of task
-  descriptions
-- Locking Mechanism - For critical operations (e.g., task deletion)
-- Version Numbers - Track entity versions to detect conflicts
-
-5.5 Heartbeat & Reconnection
-
-- Server sends ping every 25 seconds, client responds with pong
-- If no pong received within 60 seconds, server considers client
-  disconnected
-- Client automatically attempts reconnection with exponential backoff
-- On reconnection, client receives full board state and missed events
-
-6\. API Contract Design
-
-6.1 Request/Response Format
-
-All API requests and responses follow consistent JSON format:
-
-Success Response (200-201)
-
-> {
->
-> \"success\": true,
->
-> \"data\": { /\* response data \*/ },
->
-> \"message\": \"Operation successful\"
->
-> }
-
-Error Response (4xx-5xx)
-
-> {
->
-> \"success\": false,
->
-> \"error\": {
->
-> \"code\": \"VALIDATION_ERROR\",
->
-> \"message\": \"Invalid input\",
->
-> \"details\": { /\* field errors \*/ }
->
-> }
->
-> }
-
-6.2 Authentication
-
-> Authorization: Bearer \<supabase_access_token\>
-
-Access tokens are issued and managed by Supabase Auth. The Supabase
-JS SDK handles automatic token refresh on the client side. The backend
-verifies the JWT using the Supabase JWT secret.
-
-6.3 Pagination
-
-> GET /api/boards?page=1&limit=10&sort=created_at&order=desc
->
-> Response:
->
-> {
->
-> \"data\": \[\...\],
->
-> \"pagination\": {
->
-> \"page\": 1,
->
-> \"limit\": 10,
->
-> \"total\": 45,
->
-> \"pages\": 5
->
-> }
->
-> }
-
-6.4 Sample API Calls
-
-Create Task
-
-> POST /api/lists/list-123/tasks
->
-> {
->
-> \"title\": \"Implement authentication\",
->
-> \"description\": \"Add Supabase auth integration\",
->
-> \"priority\": \"high\",
->
-> \"due_date\": \"2025-02-20\"
->
-> }
-
-Update Task Position
-
-> PUT /api/tasks/task-123/position
->
-> {
->
-> \"list_id\": \"list-456\",
->
-> \"position\": 3
->
-> }
-
-Search Tasks
-
-> GET /api/boards/board-123/tasks?search=auth&priority=high&status=open
-
-7\. Security & Authentication
-
-7.1 Authentication Strategy
-
-Supabase Auth (Managed Authentication)
-
-- Authentication is delegated to Supabase Auth, removing the need for
-  custom auth logic on the backend
-- Supabase issues JWTs signed with a project-specific secret
-- Access Token: Short-lived, automatically refreshed by Supabase SDK
-- Session management handled entirely by Supabase client library
-- User claims in token: sub (user id), email, role, aud
-- Supported auth methods: email/password, Google OAuth, GitHub OAuth,
-  magic links
-
-7.2 Password Security
-
-- Passwords are managed by Supabase Auth (bcrypt hashing handled
-  internally)
-- Password policies configurable via Supabase Dashboard
-- Password reset via Supabase's built-in email reset flow
-  (supabase.auth.resetPasswordForEmail())
-- Email verification enforced via Supabase settings
-
-7.3 Authorization Levels
+### 8.3 Total: 498 tests, all passing
 
 ---
 
-  **Role**                **Permissions**         **Scope**
+## 9. Deployment Architecture
 
-  Admin                   Full control            Board level
+### 9.1 Docker
 
-  Editor                  Create, edit, delete    Board level
-                          tasks
+**API Dockerfile** (multi-stage):
 
-  Viewer                  View only               Board level
+```dockerfile
+# Stage 1: Install deps
+FROM node:20-alpine AS base
+RUN corepack enable && corepack prepare pnpm@9.0.0 --activate
 
-  Owner                   Delete board, manage    Board level
-                          members
+# Stage 2: Build (prisma generate + tsc)
+FROM base AS builder
+# ... copy workspace, install, build
 
----
+# Stage 3: Production runner
+FROM node:20-alpine AS runner
+USER appuser
+EXPOSE 5000
+CMD ["node", "dist/app.js"]
+```
 
-7.4 API Security
+### 9.2 Docker Compose
 
-- CORS - Restrict to frontend domain only
-- Rate Limiting - 100 requests per minute per IP
-- Input Validation - All inputs validated using Joi schemas
-- SQL Injection Prevention - Parameterized queries via Prisma ORM
-- CSRF Protection - SameSite=Strict cookie policy
-- HTTPS Only - All communications encrypted
+Three services with health checks:
 
-7.5 Data Privacy
+| Service | Image | Port | Depends On |
+|---|---|---|---|
+| `postgres` | postgres:16-alpine | 5432 | — |
+| `api` | Built from `apps/api/Dockerfile` | 5000 | postgres (healthy) |
+| `web` | Built from `apps/web/Dockerfile` | 3000 | api (healthy) |
 
-- Sensitive data (tokens) never logged; passwords managed by Supabase
-- User data encrypted at rest using PGP encryption for PII
-- Activity logs retained for 90 days, then archived
-- GDPR compliance - User data export and deletion capabilities
+### 9.3 CI/CD Pipeline (GitHub Actions)
 
-8\. Scalability & Performance
+**CI** (`.github/workflows/ci.yml`) — on push/PR to `master`/`develop`:
 
-8.1 Frontend Performance
+```
+┌─────────────────┐
+│   lint +         │
+│   check-types    │
+└────────┬────────┘
+    ┌────┴────┐
+    │         │
+┌───▼───┐ ┌──▼────┐
+│test-  │ │test-  │
+│web    │ │api    │
+│(Vitest)│ │(Jest) │
+└───┬───┘ └──┬────┘
+    └────┬────┘
+    ┌────▼────┐
+    │  build  │
+    └─────────┘
+```
 
-- Code splitting - Lazy load components with React.lazy()
-- Memoization - Prevent unnecessary re-renders with React.memo()
-- Virtual scrolling - Efficiently render large task lists
-- Debouncing - Throttle search and drag-drop operations
-- Service workers - Offline support and caching strategy
+**CD** (`.github/workflows/cd.yml`) — on push to `main`:
 
-8.2 Backend Scaling
+1. Run full CI pipeline
+2. Build & push Docker images to GHCR
+3. SSH to production server
+4. `docker compose pull && docker compose up -d`
 
-Horizontal Scaling
+### 9.4 Environment Variables
 
-- Stateless design - Each server instance is independent
-- Load balancer (Nginx) - Distribute traffic across multiple servers
-- Redis for sessions - Shared session store across instances
-- Socket.io adapter - Redis adapter for cross-server communication
+**Backend (`apps/api/.env`):**
 
-Database Optimization
+| Variable | Required | Description |
+|---|---|---|
+| `PORT` | No | Default 5000 |
+| `NODE_ENV` | No | development / production / test |
+| `CORS_ORIGIN` | No | Default http://localhost:3000 |
+| `DATABASE_URL` | Yes | PostgreSQL connection string |
+| `SUPABASE_URL` | Yes | Supabase project URL |
+| `SUPABASE_ANON_KEY` | Yes | Supabase anonymous key |
+| `SUPABASE_SERVICE_ROLE_KEY` | Yes | Supabase service role key |
+| `SUPABASE_JWT_SECRET` | Yes | Supabase JWT signing secret |
 
-- Connection pooling - PgBouncer limits active connections
-- Query optimization - Indexes on frequently filtered columns
-- Read replicas - Distribute read-heavy queries
-- Partitioning - Partition activity_logs table by board_id
+**Frontend (`apps/web/.env.local`):**
 
-8.3 Caching Strategy
-
----
-
-  **Layer**         **Technology**    **TTL**           **Use Case**
-
-  Frontend          Browser cache     30 min            Static assets
-
-  Frontend          Zustand store     Session           Application state
-
-  Backend           Redis             5-30 min          User, board data
-
-  Database          Query cache       1 min             Frequently
-                                                        accessed data
-
-  CDN               CloudFront        1 hour            Static files,
-                                                        images
-
----
-
-8.4 Monitoring & Observability
-
-- Application metrics - Prometheus for request duration, error rates
-- Logs - ELK stack (Elasticsearch, Logstash, Kibana)
-- APM - New Relic or DataDog for performance monitoring
-- Alerting - PagerDuty for critical issues
-- Health checks - /health endpoint for load balancer
-
-9\. Deployment Architecture
-
-9.1 Container Strategy
-
-Each app in the Turborepo monorepo has its own Dockerfile. Turborepo's
-pruning feature (turbo prune) creates a minimal, isolated workspace
-for each Docker build.
-
-> \# Dockerfile for backend (apps/api)
->
-> FROM node:18-alpine AS builder
->
-> WORKDIR /app
->
-> RUN npm install -g turbo
->
-> COPY . .
->
-> RUN turbo prune api \--docker
->
-> FROM node:18-alpine AS installer
->
-> WORKDIR /app
->
-> COPY \--from=builder /app/out/json/ .
->
-> RUN npm ci
->
-> COPY \--from=builder /app/out/full/ .
->
-> RUN npx turbo run build \--filter=api
->
-> FROM node:18-alpine AS runner
->
-> WORKDIR /app
->
-> COPY \--from=installer /app/apps/api/dist ./dist
->
-> COPY \--from=installer /app/apps/api/prisma ./prisma
->
-> COPY \--from=installer /app/apps/api/package.json .
->
-> RUN npm ci \--only=production
->
-> EXPOSE 5000
->
-> CMD \[\"node\", \"dist/app.js\"\]
-
-9.2 Kubernetes Deployment
-
-Components
-
-- Frontend - Served via Nginx ingress
-- Backend API - Replicated pods with auto-scaling
-- WebSocket server - Sticky sessions via affinity rules
-- PostgreSQL - Managed database service (RDS/Cloud SQL)
-- Redis - In-memory store for sessions and caching
-
-9.3 CI/CD Pipeline
-
-GitHub Actions Workflow (with Turborepo)
-
-- Trigger: Push to main/develop branch
-- Cache: Restore Turborepo remote cache for faster builds
-- Build: Run turbo run lint test build (parallel, cached)
-- Affected: Only rebuild/test apps affected by changed files
-- Deploy: Push Docker images (web, api) to registry, update
-  Kubernetes
-- Verify: Smoke tests on staging environment
-- Promote: Manual approval for production deployment
-
-9.4 Environment Setup
+| Variable | Required | Description |
+|---|---|---|
+| `NEXT_PUBLIC_API_URL` | Yes | Backend API URL |
+| `NEXT_PUBLIC_SUPABASE_URL` | Yes | Supabase project URL |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Yes | Supabase anonymous key |
 
 ---
 
-  **Environment**   **Infrastructure**   **Database**      **WebSockets**
+## 10. Trade-offs & Decisions
 
-  Development       Local machine        Local PostgreSQL  Localhost
-
-  Staging           Single Kubernetes    Managed RDS       Prod config
-                    node
-
-  Production        Multi-node           RDS with backups  Redis-backed
-                    Kubernetes
+| Decision | Trade-off | Rationale |
+|---|---|---|
+| REST over GraphQL | More endpoints, simpler caching | Straightforward for CRUD, easy testing |
+| Next.js App Router over SPA | SSR complexity | Built-in routing, layouts, React Server Components |
+| Zod over Joi | Smaller ecosystem | First-class TypeScript inference, shared client/server |
+| @dnd-kit over react-beautiful-dnd | Newer, less battle-tested | Active maintenance, headless design, React 19 support |
+| Socket.IO over raw WS | Larger bundle | Automatic reconnection, rooms, fallback transports |
+| PostgreSQL over NoSQL | Rigid schema | ACID compliance, relational integrity, Prisma support |
+| Docker Compose over K8s | No auto-scaling | Simpler ops for single-server deployment |
+| Vitest over Jest (frontend) | Different from backend | Native ESM, faster, Vite integration |
 
 ---
 
-10\. Assumptions & Trade-offs
+## 11. Conclusion
 
-10.1 Key Assumptions
+Hintro's PERN architecture delivers a production-ready, real-time Kanban platform with:
 
-- Users have stable internet connection for real-time features
-- Maximum 1000 concurrent users per instance
-- Board size limit: 500 tasks per board
-- Activity logs retained for 90 days only
-- No built-in encryption for user communications (relying on HTTPS)
-
-10.2 Trade-offs Made
-
-Choice: REST API over GraphQL
-
-- Trade-off: More endpoints but simpler caching strategy
-- Benefit: Easier for beginners, faster development
-- Future: Can add GraphQL layer for complex queries
-
-Choice: Polling + WebSockets over CRDT
-
-- Trade-off: Potential race conditions in simultaneous edits
-- Benefit: Simpler implementation, easier to debug
-- Impact: Acceptable for task management (not real-time docs)
-
-Choice: PostgreSQL over NoSQL
-
-- Trade-off: Less flexible schema for evolving requirements
-- Benefit: ACID compliance, data integrity, relational queries
-- Suitable: Structured task data with clear relationships
-
-Choice: Session storage in Redis
-
-- Trade-off: Additional infrastructure dependency
-- Benefit: Shared sessions for horizontal scaling
-- Alternative: In-memory store for single-instance deployment
-
-11\. Implementation Checklist
-
-11.1 Phase 1: Core (Weeks 1-3)
-
-- Setup: Turborepo monorepo scaffold (apps/web, apps/api,
-  packages/shared), Docker setup, Supabase project setup,
-  database migrations
-- Backend: Supabase Auth integration, board CRUD, task CRUD endpoints
-- Frontend: Login (Supabase Auth UI), dashboard, board view components
-- Testing: Unit tests for API endpoints and auth middleware
-
-11.2 Phase 2: Real-time (Weeks 4-5)
-
-- WebSockets: Implement Socket.io integration
-- Real-time sync: Task updates, activity broadcast
-- Conflict resolution: Handle concurrent edits
-- Integration: Connect frontend to WebSocket events
-
-11.3 Phase 3: Advanced Features (Weeks 6-7)
-
-- Drag & drop: Task movement across lists
-- Search & filters: Advanced task filtering
-- Activity history: Full audit trail
-- Notifications: Email and in-app notifications
-
-11.4 Phase 4: Polish & Deployment (Week 8)
-
-- Performance: Caching, optimization, load testing
-- Security: Penetration testing, security audit
-- Documentation: API docs, deployment guide
-- Production release: CI/CD pipeline, monitoring setup
-
-12\. Conclusion
-
-This PERN stack architecture provides a solid foundation for a scalable,
-real-time task collaboration platform. The separation of concerns across
-frontend, backend, and database layers enables independent scaling and
-maintenance. The WebSocket implementation ensures users experience
-real-time updates without polling overhead.
-
-Key strengths of this design:
-
-- Turborepo monorepo enables shared code, parallel builds, and
-  unified CI/CD
-- Modular architecture allows team parallelization
-- REST API provides clear contracts and easy testing
-- PostgreSQL ensures data consistency and ACID compliance
-- WebSocket real-time features enable true collaboration
-- Horizontal scalability through stateless design
-- Comprehensive security with Supabase Auth and role-based access
-  control
-
-The implementation roadmap is realistic for an 8-week development cycle
-with proper testing and deployment practices.
+- **Turborepo monorepo** for shared code, parallel builds, and unified CI/CD
+- **Next.js 16 + React 19** front end with Zustand stores, @dnd-kit drag-and-drop, and Tailwind CSS
+- **Express 5 + Prisma 6** back end with Zod validation and Socket.IO real-time
+- **Supabase Auth** for managed authentication with role-based authorisation
+- **498 automated tests** (Vitest + Jest) with GitHub Actions CI/CD
+- **Docker Compose** deployment with PostgreSQL, API, and Web services

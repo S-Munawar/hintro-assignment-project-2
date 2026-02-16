@@ -4,7 +4,7 @@ import { useEffect } from "react";
 import { useSocketStore } from "@/store/useSocketStore";
 import { useBoardStore } from "@/store/useBoardStore";
 import { useTaskStore } from "@/store/useTaskStore";
-import type { Task, ListWithTasks } from "@/types";
+import type { Task, ListWithTasks, BoardDetail, BoardMember } from "@/types";
 
 /**
  * Subscribe to real-time events for a specific board.
@@ -119,13 +119,13 @@ export function useBoardSocket(boardId: string) {
 
     // ── Board events ───────────────────────────────────────────────
 
-    const onBoardUpdated = (data: { boardId: string; board: any }) => {
+    const onBoardUpdated = (data: { boardId: string; board: Partial<BoardDetail> }) => {
       const board = useBoardStore.getState().currentBoard;
       if (!board || board.id !== data.boardId) return;
       useBoardStore.setState({ currentBoard: { ...board, ...data.board } });
     };
 
-    const onMemberAdded = (data: { boardId: string; member: any }) => {
+    const onMemberAdded = (data: { boardId: string; member: BoardMember }) => {
       const board = useBoardStore.getState().currentBoard;
       if (!board || board.id !== data.boardId) return;
       if (board.members.some((m) => m.id === data.member.id)) return;

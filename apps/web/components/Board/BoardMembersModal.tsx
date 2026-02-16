@@ -37,7 +37,7 @@ export default function BoardMembersModal({ board, isOpen, onClose }: BoardMembe
   const [adding, setAdding] = useState<string | null>(null);
   const [removing, setRemoving] = useState<string | null>(null);
   const [selectedRole, setSelectedRole] = useState<BoardRole>("editor");
-  const debounceRef = useRef<ReturnType<typeof setTimeout>>();
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Focus input when modal opens

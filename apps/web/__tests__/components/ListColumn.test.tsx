@@ -6,6 +6,23 @@ import { useBoardStore } from "@/store/useBoardStore";
 import { useToastStore } from "@/store/useToastStore";
 import { createListWithTasks, createTask } from "../helpers/factories";
 
+vi.mock("@dnd-kit/sortable", () => ({
+  SortableContext: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  verticalListSortingStrategy: {},
+  useSortable: () => ({
+    attributes: {},
+    listeners: {},
+    setNodeRef: () => {},
+    transform: null,
+    transition: null,
+    isDragging: false,
+  }),
+}));
+
+vi.mock("@dnd-kit/core", () => ({
+  useDroppable: () => ({ setNodeRef: () => {}, isOver: false }),
+}));
+
 vi.mock("@/store/useBoardStore", () => ({
   useBoardStore: vi.fn(),
 }));

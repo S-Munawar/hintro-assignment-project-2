@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { X } from "lucide-react";
 
 interface ToastProps {
@@ -10,12 +10,10 @@ interface ToastProps {
   onClose: () => void;
 }
 
-export default function Toast({ message, type = "info", duration = 3000, onClose }: ToastProps) {
-  const [isVisible, setIsVisible] = useState(true);
+export default function Toast({ message, duration = 3000, onClose }: ToastProps) {
 
   useEffect(() => {
     const timer = setTimeout(() => {
-      setIsVisible(false);
       setTimeout(onClose, 300);
     }, duration);
 
@@ -25,7 +23,7 @@ export default function Toast({ message, type = "info", duration = 3000, onClose
   return (
     <div>
       <span>{message}</span>
-      <button onClick={() => { setIsVisible(false); onClose(); }} type="button">
+      <button onClick={() => { onClose(); }} type="button">
         <X size={16} />
       </button>
     </div>

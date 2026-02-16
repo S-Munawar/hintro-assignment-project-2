@@ -3,6 +3,17 @@ import { render, screen, fireEvent } from "@testing-library/react";
 import TaskCard from "@/components/Task/TaskCard";
 import { createTask, createTaskAssignee } from "../helpers/factories";
 
+vi.mock("@dnd-kit/sortable", () => ({
+  useSortable: () => ({
+    attributes: {},
+    listeners: {},
+    setNodeRef: () => {},
+    transform: null,
+    transition: null,
+    isDragging: false,
+  }),
+}));
+
 describe("TaskCard", () => {
   const onClick = vi.fn();
 

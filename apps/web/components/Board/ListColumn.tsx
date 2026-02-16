@@ -7,6 +7,8 @@ import { MoreHorizontal, Trash2, Edit3 } from "lucide-react";
 import type { ListWithTasks } from "@/types";
 import TaskCard from "@/components/Task/TaskCard";
 import CreateTaskForm from "@/components/Task/CreateTaskForm";
+import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import { useDroppable } from "@dnd-kit/core";
 
 interface ListColumnProps {
   list: ListWithTasks;
@@ -20,6 +22,9 @@ export default function ListColumn({ list, boardId, onTaskClick }: ListColumnPro
   const [showMenu, setShowMenu] = useState(false);
   const { updateList, deleteList } = useBoardStore();
   const { addToast } = useToastStore();
+
+  // Make the list a droppable zone (so tasks can be dropped on empty lists too)
+  const { setNodeRef, isOver } = useDroppable({ id: list.id });
 
   const handleRename = async () => {
     if (!name.trim() || name.trim() === list.name) {
@@ -46,8 +51,12 @@ export default function ListColumn({ list, boardId, onTaskClick }: ListColumnPro
     }
   };
 
+  const taskIds = list.tasks
+    .filter((t, i, arr) => arr.findIndex((x) => x.id === t.id) === i)
+    .map((t) => t.id);
+
   return (
-    <div className="kanban-column">
+    <div className={`kanban-column ${isOver ? "ring-2 ring-indigo-300 bg-indigo-50/40" : ""}`}>
       {/* Header */}
       <div className="flex items-center justify-between px-3 py-3">
         {isEditing ? (
@@ -102,14 +111,20 @@ export default function ListColumn({ list, boardId, onTaskClick }: ListColumnPro
         </div>
       </div>
 
-      {/* Tasks */}
-      <div className="flex-1 overflow-y-auto px-2 pb-2 space-y-2 min-h-[60px]" data-list-id={list.id}>
-        {list.tasks
-          .filter((t, i, arr) => arr.findIndex((x) => x.id === t.id) === i)
-          .map((task) => (
-            <TaskCard key={task.id} task={task} onClick={() => onTaskClick(task.id)} />
-          ))}
-      </div>
+      {/* Tasks — sortable context enables reorder within this list */}
+      <SortableContext items={taskIds} strategy={verticalListSortingStrategy}>
+        <div
+          ref={setNodeRef}
+          className="flex-1 overflow-y-auto px-2 pb-2 space-y-2 min-h-[60px]"
+          data-list-id={list.id}
+        >
+          {list.tasks
+            .filter((t, i, arr) => arr.findIndex((x) => x.id === t.id) === i)
+            .map((task) => (
+              <TaskCard key={task.id} task={task} onClick={() => onTaskClick(task.id)} />
+            ))}
+        </div>
+      </SortableContext>
 
       {/* Add task */}
       <div className="px-2 pb-2">

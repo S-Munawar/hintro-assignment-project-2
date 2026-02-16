@@ -43,7 +43,7 @@ interface BoardState {
   clearCurrentBoard: () => void;
 }
 
-export const useBoardStore = create<BoardState>((set, get) => ({
+export const useBoardStore = create<BoardState>((set) => ({
   boards: [],
   boardsPagination: null,
   boardsLoading: false,

@@ -2,20 +2,54 @@
 
 import type { Task } from "@/types";
 import { Calendar } from "lucide-react";
+import { useSortable } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 
 interface TaskCardProps {
   task: Task;
   onClick: () => void;
+  /** When true the card is rendered inside DragOverlay — no sortable hook */
+  isOverlay?: boolean;
 }
 
-export default function TaskCard({ task, onClick }: TaskCardProps) {
+export default function TaskCard({ task, onClick, isOverlay }: TaskCardProps) {
   const isOverdue = task.due_date && new Date(task.due_date) < new Date();
 
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: task.id, disabled: isOverlay });
+
+  const style: React.CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.4 : 1,
+    cursor: isDragging ? "grabbing" : "grab",
+  };
+
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="w-full text-left bg-white rounded-xl border border-slate-200/80 p-3 shadow-sm hover:shadow-md hover:border-slate-300 transition-all cursor-pointer group"
+    <div
+      ref={setNodeRef}
+      style={style}
+      {...attributes}
+      {...listeners}
+      role="button"
+      tabIndex={0}
+      onClick={(e) => {
+        // Prevent opening the detail modal while dragging
+        if (isDragging) return;
+        onClick();
+      }}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") onClick();
+      }}
+      className={`w-full text-left bg-white rounded-xl border border-slate-200/80 p-3 shadow-sm hover:shadow-md hover:border-slate-300 transition-all group ${
+        isDragging ? "ring-2 ring-indigo-400 z-50" : ""
+      } ${isOverlay ? "shadow-lg ring-2 ring-indigo-400 rotate-[2deg] scale-105" : ""}`}
     >
       <p className="text-sm font-medium text-slate-800 group-hover:text-indigo-600 transition-colors line-clamp-2">
         {task.title}
@@ -57,6 +91,6 @@ export default function TaskCard({ task, onClick }: TaskCardProps) {
           </div>
         )}
       </div>
-    </button>
+    </div>
   );
 }

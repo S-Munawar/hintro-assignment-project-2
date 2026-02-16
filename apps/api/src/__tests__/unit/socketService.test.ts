@@ -93,9 +93,9 @@ describe("socketService", () => {
     });
 
     it("should reject connection with invalid token", async () => {
-      (createClient as jest.Mock).mockReturnValue({
+      (createClient as unknown as jest.Mock).mockReturnValue({
         auth: {
-          getUser: jest.fn().mockResolvedValue({
+          getUser: jest.fn<() => Promise<unknown>>().mockResolvedValue({
             data: { user: null },
             error: { message: "Invalid token" },
           }),
@@ -111,9 +111,9 @@ describe("socketService", () => {
     });
 
     it("should accept connection with valid token and attach user data", async () => {
-      (createClient as jest.Mock).mockReturnValue({
+      (createClient as unknown as jest.Mock).mockReturnValue({
         auth: {
-          getUser: jest.fn().mockResolvedValue({
+          getUser: jest.fn<() => Promise<unknown>>().mockResolvedValue({
             data: { user: { id: "user-1", email: "test@test.com" } },
             error: null,
           }),
@@ -131,9 +131,9 @@ describe("socketService", () => {
     });
 
     it("should handle exceptions in auth", async () => {
-      (createClient as jest.Mock).mockReturnValue({
+      (createClient as unknown as jest.Mock).mockReturnValue({
         auth: {
-          getUser: jest.fn().mockRejectedValue(new Error("Network error")),
+          getUser: jest.fn<() => Promise<unknown>>().mockRejectedValue(new Error("Network error")),
         },
       });
 

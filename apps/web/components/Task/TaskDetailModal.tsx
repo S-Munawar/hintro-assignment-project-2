@@ -8,7 +8,6 @@ import Modal from "@/components/Common/Modal";
 import ActivityLog from "@/components/Activity/ActivityLog";
 import Loader from "@/components/Common/Loader";
 import {
-  Calendar,
   Trash2,
   UserPlus,
   UserMinus,
@@ -17,7 +16,7 @@ import {
   Tag,
   ListTodo,
 } from "lucide-react";
-import type { TaskPriority, Task } from "@/types";
+import type { TaskPriority } from "@/types";
 
 const PRIORITIES: TaskPriority[] = ["low", "medium", "high", "urgent"];
 
@@ -29,7 +28,7 @@ interface TaskDetailModalProps {
 }
 
 export default function TaskDetailModal({ boardId, taskId, isOpen, onClose }: TaskDetailModalProps) {
-  const { selectedTask, selectedTaskLoading, updateTask, deleteTask, assignUser, unassignUser, fetchTaskDetail } = useTaskStore();
+  const { selectedTask, selectedTaskLoading, updateTask, deleteTask, assignUser, unassignUser } = useTaskStore();
   const { currentBoard } = useBoardStore();
   const { addToast } = useToastStore();
 

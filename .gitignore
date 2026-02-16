@@ -33,6 +33,10 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
+# Act (local GHA runner)
+.secrets
+.vars
+
 # Misc
 .DS_Store
 *.pem

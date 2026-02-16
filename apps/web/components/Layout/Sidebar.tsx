@@ -8,7 +8,6 @@ import { useAuth } from "@/hooks/useAuth";
 import {
   LayoutDashboard,
   Settings,
-  Plus,
   LogOut,
   Kanban,
   ChevronRight,
