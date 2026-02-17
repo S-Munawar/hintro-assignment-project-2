@@ -100,7 +100,7 @@ app.use(errorHandler);
 // ─── Start Server ────────────────────────────────────────────────────
 
 if (env.NODE_ENV !== "test") {
-  httpServer.listen(env.PORT, () => {
+  httpServer.listen(env.PORT, "0.0.0.0", () => {
     logger.info(`Server running on port ${env.PORT} in ${env.NODE_ENV} mode`);
   });
 }
